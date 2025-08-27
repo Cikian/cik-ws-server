@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket 客户端测试</title>
+    <style>
+        .container { width: 800px; margin: 20px auto; font-family: Arial, sans-serif; }
+        #messageArea {
+            height: 400px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        #messageInput { width: 680px; padding: 8px; margin-right: 10px; }
+        #sendBtn { padding: 8px 20px; }
+        .message { margin: 5px 0; padding: 8px; border-radius: 4px; }
+        .client { background-color: #e3f2fd; text-align: right; }
+        .server { background-color: #ffebee; text-align: left; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Cik-WS 测试页面</h2>
+    <div id="messageArea"></div>
+    <input type="text" id="messageInput" placeholder="输入消息后按回车或点击发送">
+    <button id="sendBtn">发送</button>
+</div>
+
+<script>
+    const wsUrl = 'ws://192.168.20.243:8950/ws/echo';
+    let websocket;
+
+    function initWebSocket() {
+        websocket = new WebSocket(wsUrl);
+
+        websocket.onopen = () => showMessage('系统', 'WebSocket连接已建立', 'system');
+
+        websocket.onmessage = (event) => showMessage('服务端', event.data, 'server');
+
+        websocket.onclose = () => {
+            showMessage('系统', 'WebSocket连接已关闭，3秒后自动重连...', 'system');
+            setTimeout(initWebSocket, 3000);
+        };
+
+        websocket.onerror = (error) => showMessage('系统', '连接错误：' + error, 'system');
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        if (message && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(message);
+            showMessage('客户端', message, 'client');
+            input.value = '';
+        } else {
+            showMessage('系统', '消息发送失败，请检查连接状态', 'system');
+        }
+    }
+
+    function showMessage(sender, content, type) {
+        const area = document.getElementById('messageArea');
+        const time = new Date().toLocaleTimeString();
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.innerHTML = `<strong>${sender}</strong> [${time}]<br>${content}`;
+        area.appendChild(messageDiv);
+        area.scrollTop = area.scrollHeight;
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    window.onload = initWebSocket;
+</script>
+</body>
+</html>

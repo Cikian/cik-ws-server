@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>多人在线聊天室</title>
+    <style>
+        .container {
+            width: 800px;
+            margin: 20px auto;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+
+        .header {
+            text-align: center;
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        #chatArea {
+            height: 450px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            background-color: #f9f9f9;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        #usernameInput {
+            width: 200px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        #sendBtn {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #sendBtn:hover {
+            background-color: #45a049;
+        }
+
+        .message {
+            margin: 8px 0;
+            padding: 10px;
+            border-radius: 6px;
+            max-width: 70%;
+        }
+
+        .system-message {
+            background-color: #e3f2fd;
+            color: #0d47a1;
+            align-self: center;
+            margin: 5px auto;
+            text-align: center;
+        }
+
+        .user-message {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            margin-left: auto;
+        }
+
+        .other-message {
+            background-color: #fff3e0;
+            color: #e65100;
+            margin-right: auto;
+        }
+
+        .message .sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .message .content {
+            word-wrap: break-word;
+        }
+
+        .message .time {
+            font-size: 0.8em;
+            color: #777;
+            margin-top: 3px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h2>多人在线聊天室</h2>
+        <p>当前在线: <span id="onlineCount">0</span> 人</p>
+    </div>
+    <div id="chatArea"></div>
+    <div class="controls">
+        <input type="text" id="usernameInput" placeholder="输入用户名后按回车" disabled>
+        <input type="text" id="messageInput" placeholder="输入消息后按回车发送" disabled>
+        <button id="sendBtn" disabled>发送</button>
+    </div>
+</div>
+
+<script>
+    const wsUrl = 'ws://192.168.20.243:8950/ws/chat';
+    let websocket;
+    let isUsernameSet = false;
+
+    // 初始化WebSocket连接
+    function initWebSocket() {
+        websocket = new WebSocket(wsUrl);
+
+        websocket.onopen = () => {
+            document.getElementById('usernameInput').disabled = false;
+            showSystemMessage('WebSocket连接已建立，请设置用户名');
+        };
+
+        websocket.onmessage = (event) => {
+            handleMessage(event.data);
+        };
+
+        websocket.onclose = () => {
+            showSystemMessage('连接已关闭，3秒后自动重连...');
+            document.getElementById('usernameInput').disabled = true;
+            document.getElementById('messageInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            isUsernameSet = false;
+            setTimeout(initWebSocket, 3000);
+        };
+
+        websocket.onerror = (error) => {
+            showSystemMessage('连接错误: ' + error);
+        };
+    }
+
+    // 处理接收到的消息
+    function handleMessage(data) {
+        try {
+            const message = JSON.parse(data);
+
+            switch (message.type) {
+                case 'system_message':
+                    showSystemMessage(message.content);
+                    break;
+                case 'user_message':
+                    showUserMessage(message.username, message.content);
+                    break;
+                default:
+                    showSystemMessage('未知消息类型');
+            }
+        } catch (e) {
+            showSystemMessage('消息解析错误: ' + data);
+        }
+    }
+
+    // 发送消息
+    function sendMessage() {
+        const messageInput = document.getElementById('messageInput');
+        const content = messageInput.value.trim();
+
+        if (!content) return;
+
+        try {
+            websocket.send(JSON.stringify({content: content}));
+            messageInput.value = '';
+        } catch (e) {
+            showSystemMessage('发送失败: ' + e);
+        }
+    }
+
+    // 设置用户名
+    function setUsername() {
+        const usernameInput = document.getElementById('usernameInput');
+        const username = usernameInput.value.trim();
+
+        if (username) {
+            websocket.send('/username ' + username);
+            usernameInput.disabled = true;
+        }
+    }
+
+    // 显示系统消息
+    function showSystemMessage(content) {
+        const chatArea = document.getElementById('chatArea');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message system-message';
+
+        const time = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `<div class="content">${content}</div><div class="time">${time}</div>`;
+
+        chatArea.appendChild(messageDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    // 显示用户消息
+    function showUserMessage(username, content) {
+        const chatArea = document.getElementById('chatArea');
+        const messageDiv = document.createElement('div');
+
+        // 判断是否是当前用户发送的消息
+        const currentUsername = document.getElementById('usernameInput').value.trim();
+        const messageClass = username === currentUsername ? 'user-message' : 'other-message';
+
+        messageDiv.className = `message ${messageClass}`;
+        const time = new Date().toLocaleTimeString();
+
+        messageDiv.innerHTML = `
+                <div class="sender">${username}</div>
+                <div class="content">${content}</div>
+                <div class="time">${time}</div>
+            `;
+
+        chatArea.appendChild(messageDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    // 事件监听
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    document.getElementById('messageInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+    document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') setUsername();
+    });
+
+    // 初始化连接
+    window.onload = initWebSocket;
+
+    // 接收用户名设置成功的通知（由系统消息触发）
+    document.addEventListener('usernameSet', (e) => {
+        isUsernameSet = true;
+        document.getElementById('messageInput').disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('messageInput').focus();
+    });
+
+    // 在系统消息显示时检查是否是用户名设置成功
+    function checkUsernameSetNotification(content) {
+        if (content.includes('用户名设置成功')) {
+            const event = new Event('usernameSet');
+            document.dispatchEvent(event);
+        }
+
+        // 提取在线用户数（假设系统消息格式包含 "当前在线用户：[列表]"）
+        const onlineMatch = content.match(/当前在线用户：(.+)/);
+        if (onlineMatch && onlineMatch[1]) {
+            const usernames = onlineMatch[1].split(',').map(u => u.trim());
+            document.getElementById('onlineCount').textContent = usernames.length;
+        }
+    }
+
+    // 重写showSystemMessage以包含用户名设置检查
+    const originalShowSystemMessage = showSystemMessage;
+    showSystemMessage = function (content) {
+        originalShowSystemMessage(content);
+        checkUsernameSetNotification(content);
+    };
+</script>
+</body>
+</html>
